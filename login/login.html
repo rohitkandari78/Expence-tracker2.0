@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Expense Tracker - 3D Spatial Finance</title>
+    <!-- Modern High-End Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <!-- 3D Interactive Ambient Background -->
+    <canvas id="ambientCanvas" class="ambient-canvas"></canvas>
+    
+    <!-- Background Radiant Lighting Orbs -->
+    <div class="light-orb orb-1"></div>
+    <div class="light-orb orb-2"></div>
+    <div class="light-orb orb-3"></div>
+
+    <div class="login-screen">
+        <!-- 3D Holographic Card Container -->
+        <div class="login-card-3d" id="loginCard">
+            <!-- Glass Specular Reflection Highlight -->
+            <div class="card-glass-sheen"></div>
+
+            <!-- 3D Floating Brand Emblem -->
+            <div class="brand-emblem-wrapper">
+                <div class="brand-emblem-core">
+                    <div class="emblem-inner-glow"></div>
+                    <svg class="emblem-svg" viewBox="0 0 64 64" fill="none">
+                        <defs>
+                            <linearGradient id="prismGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#38bdf8" />
+                                <stop offset="50%" stop-color="#818cf8" />
+                                <stop offset="100%" stop-color="#c084fc" />
+                            </linearGradient>
+                            <linearGradient id="shieldGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#4f46e5" />
+                                <stop offset="100%" stop-color="#06b6d4" />
+                            </linearGradient>
+                        </defs>
+                        <!-- 3D Isometric Diamond Prism Icon -->
+                        <polygon points="32,6 56,20 32,34 8,20" fill="url(#prismGrad)" opacity="0.95" />
+                        <polygon points="8,20 32,34 32,58 8,44" fill="url(#shieldGrad)" opacity="0.8" />
+                        <polygon points="56,20 32,34 32,58 56,44" fill="url(#prismGrad)" opacity="0.65" />
+                        <!-- Futuristic Core Sparkle -->
+                        <circle cx="32" cy="34" r="3" fill="#ffffff" filter="drop-shadow(0 0 6px #ffffff)" />
+                    </svg>
+                </div>
+            </div>
+
+            <div class="header-text-block">
+                <div class="version-badge">
+                    <span class="badge-dot"></span>
+                    SPATIAL EXPENSE TRACKER
+                </div>
+                <h1 class="brand-title">Financial Flow <span class="gradient-text">3D</span></h1>
+                <p class="tagline">Intelligent spending analytics, holographic budgeting, and seamless expense splitting.</p>
+            </div>
+
+            <!-- Feature Badges -->
+            <div class="feature-pills">
+                <span class="pill">💎 3D Spatial UI</span>
+                <span class="pill">💼 Employee Salary Tracker</span>
+                <span class="pill">📊 50/30/20 Rule</span>
+                <span class="pill">🤝 Bill Splitting</span>
+            </div>
+
+            <!-- Action Buttons Area -->
+            <div class="auth-actions">
+                <!-- Primary 3D Google Button -->
+                <button id="googleSignIn" class="btn-3d btn-3d-primary">
+                    <span class="btn-3d-top">
+                        <svg class="google-icon" width="20" height="20" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.87c2.26-2.09 3.67-5.17 3.67-9.15z"/>
+                            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.05c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.27v3.15C3.25 21.31 7.34 24 12 24z"/>
+                            <path fill="#FBBC05" d="M5.27 14.24c-.25-.72-.38-1.49-.38-2.24s.13-1.52.38-2.24V6.61H1.27C.46 8.23 0 10.06 0 12s.46 3.77 1.27 5.39l4-3.15z"/>
+                            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.25 2.69 1.27 6.61l4 3.15c.95-2.85 3.6-4.96 6.73-4.96z"/>
+                        </svg>
+                        <span>Continue with Google</span>
+                    </span>
+                    <span class="btn-3d-edge"></span>
+                </button>
+
+                <!-- Secondary 3D Instant Demo / Guest Button -->
+                <button id="guestSignInBtn" class="btn-3d btn-3d-secondary" title="Instant access with preloaded demo data">
+                    <span class="btn-3d-top">
+                        <span class="sparkle-icon">✨</span>
+                        <span>Explore Live Demo Mode</span>
+                    </span>
+                    <span class="btn-3d-edge"></span>
+                </button>
+            </div>
+
+            <!-- Trust / Security Footnote -->
+            <div class="security-footer">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                <span>End-to-end encrypted • Cloud or Local Persistence</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <!-- App Scripts -->
+    <script src="../js/firebase-config.js"></script>
+    <script src="../js/classes.js"></script>
+    <script src="login.js"></script>
+</body>
+</html>
