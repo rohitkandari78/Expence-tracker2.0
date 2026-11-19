@@ -1184,12 +1184,8 @@ window.deleteExpense = deleteExpense;
  * ==========================================================================
  */
 
-// AI Controller API Host (connects to Render in production, localhost in development)
-window.AI_API_BASE_URL = window.AI_API_BASE_URL || (
-    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:8000'
-        : 'https://expence2-0.onrender.com'
-);
+// AI Controller API Host - Pointing directly to Live Render Cloud Backend
+window.AI_API_BASE_URL = 'https://expence2-0.onrender.com';
 
 function initAiAssistant() {
     const openAiChatBtn = document.getElementById('openAiChatBtn');
