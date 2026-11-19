@@ -16,7 +16,7 @@ class User {
         this.photoURL = photoURL;
         this.budgets = {}; // Stored by "YYYY-M" key e.g. "2026-9": 45000
         this.salaries = {}; // Stored by "YYYY-M" key e.g. "2026-9": { amount: 75000, employer: "Google", payDay: 1 }
-        this.employer = 'Tech Corp Global';
+        this.employer = '';
         this.expenses = [];
         this.isGuest = isGuest;
     }
@@ -93,7 +93,7 @@ class User {
         if (this.salaries[monthKey] && this.salaries[monthKey].employer) {
             return this.salaries[monthKey].employer;
         }
-        return this.employer || 'Salaried Professional';
+        return this.employer || '';
     }
 
     /**
@@ -330,18 +330,18 @@ class Expense {
     toFirestore() {
         return {
             id: this.id,
-            amount: this.amount,
-            category: this.category,
-            description: this.description,
+            amount: Number(this.amount) || 0,
+            category: this.category || 'General',
+            description: this.description || '',
             date: this.date,
             type: this.type || 'expense',
-            splitWith: this.splitWith,
-            createdAt: firebase.firestore.Timestamp.fromDate(this.createdAt)
+            splitWith: Array.isArray(this.splitWith) ? this.splitWith : [],
+            createdAt: this.createdAt ? firebase.firestore.Timestamp.fromDate(this.createdAt) : firebase.firestore.FieldValue.serverTimestamp()
         };
     }
 
     static fromFirestore(doc) {
-        const data = doc.data();
+        const data = doc.data() || {};
         const expense = new Expense(
             data.amount,
             data.category,
@@ -349,26 +349,26 @@ class Expense {
             data.date,
             data.type || 'expense'
         );
-        expense.id = data.id;
-        expense.splitWith = data.splitWith || [];
-        expense.createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
+        expense.id = doc.id || data.id;
+        expense.splitWith = Array.isArray(data.splitWith) ? data.splitWith : [];
+        expense.createdAt = data.createdAt ? (typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate() : new Date(data.createdAt)) : new Date();
         return expense;
     }
 }
 
 /**
  * ExpenseManager Class
- * Handles operations and persistence across Firebase and LocalStorage
+ * Handles operations and persistence across Cloud Firestore
  */
 class ExpenseManager {
     constructor(user) {
         this.user = user;
         this.db = null;
-        if (!user.isGuest && typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0) {
+        if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0) {
             try {
                 this.db = firebase.firestore();
             } catch (err) {
-                console.warn('Firestore initialization failed, using local storage fallback:', err);
+                console.warn('Firestore initialization failed:', err);
             }
         }
     }
@@ -543,87 +543,64 @@ class ExpenseManager {
     }
 
     /**
-     * Load user data
+     * Load user data strictly from Cloud Firestore
      */
     async loadUserData() {
+        if (!this.db) {
+            console.warn('No Firestore connection found, initializing empty user state');
+            this.user.budgets = {};
+            this.user.salaries = {};
+            this.user.employer = '';
+            this.user.expenses = [];
+            return true;
+        }
+
         try {
-            if (this.db) {
-                const userDoc = await this.db.collection('users').doc(this.user.uid).get();
-                if (userDoc.exists) {
-                    const data = userDoc.data();
-                    if (data.budgets) this.user.budgets = data.budgets;
-                    if (data.salaries) this.user.salaries = data.salaries;
-                    if (data.employer) this.user.employer = data.employer;
-                }
-
-                const expensesSnapshot = await this.db
-                    .collection('users')
-                    .doc(this.user.uid)
-                    .collection('expenses')
-                    .orderBy('createdAt', 'desc')
-                    .get();
-
-                this.user.expenses = [];
-                expensesSnapshot.forEach(doc => {
-                    const expense = Expense.fromFirestore(doc);
-                    this.user.addExpense(expense);
-                });
-
-                return true;
+            const userDoc = await this.db.collection('users').doc(this.user.uid).get();
+            if (userDoc.exists) {
+                const data = userDoc.data() || {};
+                this.user.budgets = data.budgets || {};
+                this.user.salaries = data.salaries || {};
+                this.user.employer = data.employer || '';
+            } else {
+                // Initialize clean user document in Firestore without any hardcoded values
+                await this.db.collection('users').doc(this.user.uid).set({
+                    uid: this.user.uid,
+                    email: this.user.email || '',
+                    displayName: this.user.displayName || '',
+                    photoURL: this.user.photoURL || '',
+                    budgets: {},
+                    salaries: {},
+                    employer: '',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true });
+                this.user.budgets = {};
+                this.user.salaries = {};
+                this.user.employer = '';
             }
+
+            // Load user's actual transactions from Firestore
+            const expensesSnapshot = await this.db
+                .collection('users')
+                .doc(this.user.uid)
+                .collection('expenses')
+                .get();
+
+            this.user.expenses = [];
+            expensesSnapshot.forEach(doc => {
+                const expense = Expense.fromFirestore(doc);
+                this.user.addExpense(expense);
+            });
+
+            return true;
         } catch (error) {
-            console.warn('Cloud loading error, falling back to local storage:', error);
+            console.error('Error loading data from Firestore:', error);
+            this.user.budgets = {};
+            this.user.salaries = {};
+            this.user.employer = '';
+            this.user.expenses = [];
+            return false;
         }
-
-        // Local storage / Demo data loading
-        const local = this._getLocalState();
-        if (local) {
-            this.user.budgets = local.budgets || {};
-            this.user.salaries = local.salaries || {};
-            this.user.employer = local.employer || 'Tech Corp Global';
-            this.user.expenses = (local.expenses || []).map(item => {
-                const exp = new Expense(item.amount, item.category, item.description, item.date, item.type || 'expense');
-                exp.id = item.id;
-                exp.splitWith = item.splitWith || [];
-                if (item.createdAt) exp.createdAt = new Date(item.createdAt);
-                return exp;
-            });
-        } else {
-            // Seed starter realistic data for salaried employee demo
-            const now = new Date();
-            const currYear = now.getFullYear();
-            const currMonth = now.getMonth();
-            const d = (dayOffset = 0) => {
-                const date = new Date(currYear, currMonth, Math.max(1, now.getDate() - dayOffset));
-                return date.toISOString().split('T')[0];
-            };
-
-            // Set employee salary details
-            this.user.employer = 'Microsoft / Tech Innovations';
-            this.user.setSalary(78000, currMonth, currYear, 'Microsoft / Tech Innovations', 1);
-            this.user.setBudget(48000, currMonth, currYear);
-
-            // Starter transactions including Salary Credit & common employee expenses
-            const starterTransactions = [
-                { amount: 78000, category: 'Salary', description: 'Monthly In-Hand Salary Credited 💼', date: d(now.getDate() - 1), type: 'income' },
-                { amount: 16500, category: 'Bills', description: 'Monthly Apartment Rent & Society Maintenance', date: d(now.getDate() - 2), type: 'expense' },
-                { amount: 4800, category: 'Food', description: 'Monthly Grocery & Supermarket Haul', date: d(3), type: 'expense' },
-                { amount: 1450, category: 'Food', description: 'Team Lunch & Artisan Cafe', date: d(1), type: 'expense', splitWith: ['Rahul', 'Priya'] },
-                { amount: 1850, category: 'Transport', description: 'Monthly Metro Card & Uber Commutes', date: d(4), type: 'expense' },
-                { amount: 2499, category: 'Shopping', description: 'Noise Cancelling Work Headphones', date: d(5), type: 'expense' },
-                { amount: 1200, category: 'Entertainment', description: 'Weekend Cinema & Popcorn', date: d(6), type: 'expense' }
-            ];
-
-            starterTransactions.forEach(item => {
-                const exp = new Expense(item.amount, item.category, item.description, item.date, item.type);
-                if (item.splitWith) exp.splitBetween(item.splitWith);
-                this.user.addExpense(exp);
-            });
-
-            this._saveLocalState();
-        }
-
-        return true;
     }
 
     /**

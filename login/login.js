@@ -3,10 +3,11 @@
 // ==========================================================================
 
 const googleSignInBtn = document.getElementById('googleSignIn');
-const guestSignInBtn = document.getElementById('guestSignInBtn');
 const loginCard = document.getElementById('loginCard');
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Clear any leftover guest mode session flag
+    localStorage.removeItem('expense_tracker_guest_mode');
     initializeAuth();
     setupEventListeners();
     init3DTilt();
@@ -36,33 +37,6 @@ function initializeAuth() {
 function setupEventListeners() {
     if (googleSignInBtn) {
         googleSignInBtn.addEventListener('click', signInWithGoogle);
-    }
-    if (guestSignInBtn) {
-        guestSignInBtn.addEventListener('click', signInAsGuest);
-    }
-}
-
-/**
- * Sign in as Guest / Instant Demo Mode
- */
-function signInAsGuest() {
-    try {
-        guestSignInBtn.disabled = true;
-        const topEl = guestSignInBtn.querySelector('.btn-3d-top');
-        if (topEl) {
-            topEl.innerHTML = '<span class="loading"></span> Entering Demo Mode...';
-        }
-
-        // Set guest session flag
-        localStorage.setItem('expense_tracker_guest_mode', 'true');
-        showToast('Entering 3D Demo Mode...', 'success');
-
-        setTimeout(() => {
-            window.location.href = '../dashboard/dashboard.html';
-        }, 600);
-    } catch (e) {
-        console.error('Guest login error:', e);
-        window.location.href = '../dashboard/dashboard.html';
     }
 }
 
@@ -132,6 +106,8 @@ async function createUserDocument(user) {
                 displayName: user.displayName,
                 photoURL: user.photoURL,
                 budgets: {},
+                salaries: {},
+                employer: '',
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });

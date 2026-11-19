@@ -127,66 +127,40 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * Initialize Application (Auth & Persistence)
+ * Initialize Application (Strict Firebase Authentication)
  */
 function initializeApp() {
-    const isGuestMode = localStorage.getItem('expense_tracker_guest_mode') === 'true';
-
-    if (isGuestMode) {
-        initGuestMode();
-        return;
-    }
+    // Clear any previous demo/guest mode flags
+    localStorage.removeItem('expense_tracker_guest_mode');
 
     if (typeof auth !== 'undefined' && auth.onAuthStateChanged) {
         auth.onAuthStateChanged(async (user) => {
             if (user) {
-                await handleUserSignIn(user, false);
+                await handleUserSignIn(user);
             } else {
-                initGuestMode();
+                console.log('No active authenticated session, redirecting to login...');
+                window.location.href = '../login/login.html';
             }
         });
     } else {
-        initGuestMode();
+        window.location.href = '../login/login.html';
     }
-}
-
-/**
- * Initialize Guest / Demo Mode
- */
-async function initGuestMode() {
-    const guestUser = new User(
-        'guest_user',
-        'alex.rivera@techcorp.io',
-        'Alex Rivera',
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-        true
-    );
-
-    if (storageModeLabel) {
-        storageModeLabel.textContent = 'Employee Edition • Local Storage Mode';
-    }
-
-    await handleUserSignIn(guestUser, true);
 }
 
 /**
  * Handle user sign in
  */
-async function handleUserSignIn(userInstance, isGuest = false) {
+async function handleUserSignIn(userInstance) {
     try {
-        if (isGuest) {
-            currentUser = userInstance;
-        } else {
-            currentUser = new User(
-                userInstance.uid,
-                userInstance.email,
-                userInstance.displayName || 'Employee User',
-                userInstance.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-                false
-            );
-            if (storageModeLabel) {
-                storageModeLabel.textContent = 'Employee Edition • Cloud Synced';
-            }
+        currentUser = new User(
+            userInstance.uid,
+            userInstance.email,
+            userInstance.displayName || 'Employee User',
+            userInstance.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+            false
+        );
+        if (storageModeLabel) {
+            storageModeLabel.textContent = 'Employee Edition • Cloud Synced';
         }
 
         expenseManager = new ExpenseManager(currentUser);
@@ -198,7 +172,7 @@ async function handleUserSignIn(userInstance, isGuest = false) {
         showToast(`Welcome back, ${currentUser.displayName}!`, 'success');
     } catch (error) {
         console.error('Error during sign in initialization:', error);
-        showToast('Error loading financial profile.', 'error');
+        showToast('Error loading financial profile from Cloud.', 'error');
     }
 }
 
@@ -208,8 +182,8 @@ async function handleUserSignIn(userInstance, isGuest = false) {
 function updateUserProfile() {
     const avatarUrl = currentUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
     if (userPhoto) userPhoto.src = avatarUrl;
-    if (userName) userName.textContent = currentUser.displayName;
-    if (cardHolderName) cardHolderName.textContent = currentUser.displayName;
+    if (userName) userName.textContent = currentUser.displayName || 'Employee User';
+    if (cardHolderName) cardHolderName.textContent = currentUser.displayName || 'Employee User';
 }
 
 /**
@@ -232,7 +206,7 @@ function updateDashboardForMonth(month, year) {
     // Card Displays
     budgetDisplay.textContent = formatCurrency(budget);
     cardSalaryDisplay.textContent = formatCurrency(salary > 0 ? salary : totalIncome);
-    cardEmployerDisplay.textContent = employer || 'Salaried Pro';
+    cardEmployerDisplay.textContent = employer || 'Set Employer';
     cardSavingsDisplay.textContent = formatCurrency(netSavings);
 
     if (netSavings >= 0) {
@@ -247,7 +221,7 @@ function updateDashboardForMonth(month, year) {
         monthlySalaryStat.textContent = formatCurrency(totalIncome);
     }
     if (employerBadge) {
-        employerBadge.textContent = `${employer} • In-Hand`;
+        employerBadge.textContent = employer ? `${employer} • In-Hand` : 'Employer Not Set';
     }
 
     // Stat 2 - Total Expenses Spent
