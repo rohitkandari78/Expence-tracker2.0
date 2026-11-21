@@ -32,6 +32,8 @@ env/
 ENV/
 .venv/
 ai-controller/venv/
+backend/venv/
+backend/.pytest_cache/
 
 # Environment Variables & Secrets
 .env
@@ -45,6 +47,7 @@ service-account*.json
 chroma_db/
 vector_store_data/
 ai-controller/chroma_db/
+backend/chroma_db/
 
 # IDE / Editor
 .vscode/
