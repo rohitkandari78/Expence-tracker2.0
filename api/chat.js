@@ -11,7 +11,7 @@
 const RENDER_BACKEND_URL = process.env.RENDER_BACKEND_URL || 'https://expence2-0.onrender.com';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     // Enable CORS for allowed origins
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');

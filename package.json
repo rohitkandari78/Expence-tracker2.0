@@ -1,0 +1,9 @@
+{
+  "name": "expense-tracker-3d",
+  "version": "1.0.0",
+  "description": "Smart Expense Tracker 3D (Employee & Salary Edition)",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 3000"
+  }
+}
