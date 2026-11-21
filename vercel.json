@@ -1,6 +1,7 @@
 {
   "cleanUrls": true,
   "rewrites": [
+    { "source": "/api/chat", "destination": "/api/chat.js" },
     { "source": "/", "destination": "/frontend/index.html" },
     { "source": "/dashboard", "destination": "/frontend/dashboard/index.html" },
     { "source": "/dashboard/dashboard", "destination": "/frontend/dashboard/index.html" },
@@ -8,7 +9,6 @@
     { "source": "/dashboard/(.*)", "destination": "/frontend/dashboard/$1" },
     { "source": "/login", "destination": "/frontend/login/login.html" },
     { "source": "/login/(.*)", "destination": "/frontend/login/$1" },
-    { "source": "/js/(.*)", "destination": "/frontend/js/$1" },
-    { "source": "/api/(.*)", "destination": "/frontend/api/$1" }
+    { "source": "/js/(.*)", "destination": "/frontend/js/$1" }
   ]
 }
