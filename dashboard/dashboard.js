@@ -97,15 +97,17 @@ const todayBtn = document.getElementById('todayBtn');
 const categoryGrid = document.getElementById('categoryGrid');
 const expenseSearchInput = document.getElementById('expenseSearchInput');
 
-// Category sets
+// Category sets (Canonical 9 categories with 50/30/20 mapping)
 const EXPENSE_CATEGORIES = [
-    { value: 'Bills', label: '💡 Utilities & Rent Bills' },
-    { value: 'Food', label: '🍔 Food & Groceries' },
-    { value: 'Transport', label: '🚗 Transport & Fuel' },
-    { value: 'Shopping', label: '🛍️ Shopping & Gadgets' },
-    { value: 'Entertainment', label: '🎬 Entertainment & Outings' },
-    { value: 'Health', label: '⚕️ Health & Medical' },
-    { value: 'Other', label: '📦 Other Expenses' }
+    { value: 'Rent & Housing', label: '🏠 Rent & Housing' },
+    { value: 'Groceries & Food', label: '🛒 Groceries & Food' },
+    { value: 'Transport & Fuel', label: '🚗 Transport & Fuel' },
+    { value: 'Utilities & Bills', label: '💡 Utilities & Bills' },
+    { value: 'Health & Wellness', label: '⚕️ Health & Wellness' },
+    { value: 'Dining Out', label: '🍽️ Dining Out' },
+    { value: 'Shopping', label: '🛍️ Shopping' },
+    { value: 'Entertainment', label: '🎬 Entertainment' },
+    { value: 'Other Expenses', label: '📦 Other Expenses' }
 ];
 
 const INCOME_CATEGORIES = [
@@ -115,6 +117,47 @@ const INCOME_CATEGORIES = [
     { value: 'Investment', label: '📈 Dividend & Stock Returns' },
     { value: 'Other Income', label: '💵 Reimbursement / Other Credit' }
 ];
+
+// 50/30/20 Category Normalization & Bucket Mapping
+const NEEDS_CATEGORIES = [
+    'Rent & Housing',
+    'Groceries & Food',
+    'Transport & Fuel',
+    'Utilities & Bills',
+    'Health & Wellness'
+];
+
+const WANTS_CATEGORIES = [
+    'Dining Out',
+    'Shopping',
+    'Entertainment',
+    'Other Expenses'
+];
+
+function normalizeCategory(category) {
+    if (!category) return 'Other Expenses';
+    const c = category.trim();
+
+    // Needs category aliases (including legacy categories)
+    if (c === 'Rent & Housing' || c === 'Rent' || c === 'Housing') return 'Rent & Housing';
+    if (c === 'Groceries & Food' || c === 'Food & Dining' || c === 'Food' || c === 'Groceries' || c === 'Food & Groceries') return 'Groceries & Food';
+    if (c === 'Transport & Fuel' || c === 'Transport' || c === 'Fuel') return 'Transport & Fuel';
+    if (c === 'Utilities & Bills' || c === 'Bills' || c === 'Utilities' || c === 'Utilities & Rent Bills') return 'Utilities & Bills';
+    if (c === 'Health & Wellness' || c === 'Health' || c === 'Medical' || c === 'Health & Medical') return 'Health & Wellness';
+
+    // Wants category aliases
+    if (c === 'Dining Out' || c === 'Dining' || c === 'Restaurant') return 'Dining Out';
+    if (c === 'Shopping' || c === 'Shopping & Gadgets') return 'Shopping';
+    if (c === 'Entertainment' || c === 'Entertainment & Outings' || c === 'Movies') return 'Entertainment';
+    if (c === 'Other Expenses' || c === 'Other') return 'Other Expenses';
+
+    return c;
+}
+
+function isNeedsCategory(category) {
+    const norm = normalizeCategory(category);
+    return NEEDS_CATEGORIES.includes(norm);
+}
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -137,13 +180,16 @@ function initializeApp() {
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 await handleUserSignIn(user);
+                // Hide auth guard overlay once user data is loaded and rendered
+                const overlay = document.getElementById('authGuardOverlay');
+                if (overlay) overlay.classList.add('hidden');
             } else {
                 console.log('No active authenticated session, redirecting to login...');
-                window.location.href = '../login/login.html';
+                window.location.replace('../login/login.html');
             }
         });
     } else {
-        window.location.href = '../login/login.html';
+        window.location.replace('../login/login.html');
     }
 }
 
@@ -152,15 +198,18 @@ function initializeApp() {
  */
 async function handleUserSignIn(userInstance) {
     try {
+        const displayName = (userInstance.displayName && userInstance.displayName.trim()) || 
+                            (userInstance.email ? userInstance.email.split('@')[0] : 'User');
+
         currentUser = new User(
             userInstance.uid,
             userInstance.email,
-            userInstance.displayName || 'Employee User',
+            displayName,
             userInstance.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
             false
         );
         if (storageModeLabel) {
-            storageModeLabel.textContent = 'Employee Edition • Cloud Synced';
+            storageModeLabel.textContent = 'Cloud Synced';
         }
 
         expenseManager = new ExpenseManager(currentUser);
@@ -169,7 +218,7 @@ async function handleUserSignIn(userInstance) {
         updateUserProfile();
         renderExpensesForViewingMonth();
 
-        showToast(`Welcome back, ${currentUser.displayName}!`, 'success');
+        showToast(`Welcome back, ${displayName}!`, 'success');
     } catch (error) {
         console.error('Error during sign in initialization:', error);
         showToast('Error loading financial profile from Cloud.', 'error');
@@ -181,9 +230,12 @@ async function handleUserSignIn(userInstance) {
  */
 function updateUserProfile() {
     const avatarUrl = currentUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
+    const rawName = currentUser.displayName;
+    const name = (rawName && rawName !== 'Employee User' && rawName !== 'Demo User') ? rawName : 'Not set';
+
     if (userPhoto) userPhoto.src = avatarUrl;
-    if (userName) userName.textContent = currentUser.displayName || 'Employee User';
-    if (cardHolderName) cardHolderName.textContent = currentUser.displayName || 'Employee User';
+    if (userName) userName.textContent = name;
+    if (cardHolderName) cardHolderName.textContent = name;
 }
 
 /**
@@ -200,13 +252,17 @@ function updateDashboardForMonth(month, year) {
 
     // Header Quick Salary Info
     if (headerSalaryText) {
-        headerSalaryText.textContent = salary > 0 ? formatCurrency(salary) : 'Set Salary';
+        headerSalaryText.textContent = (totalIncome > 0 && isFinite(totalIncome)) 
+            ? formatCurrency(salary > 0 ? salary : totalIncome) 
+            : 'Set Salary';
     }
 
     // Card Displays
     budgetDisplay.textContent = formatCurrency(budget);
-    cardSalaryDisplay.textContent = formatCurrency(salary > 0 ? salary : totalIncome);
-    cardEmployerDisplay.textContent = employer || 'Set Employer';
+    cardSalaryDisplay.textContent = (totalIncome > 0 && isFinite(totalIncome))
+        ? formatCurrency(salary > 0 ? salary : totalIncome)
+        : formatCurrency(0);
+    cardEmployerDisplay.textContent = employer || 'Not set';
     cardSavingsDisplay.textContent = formatCurrency(netSavings);
 
     if (netSavings >= 0) {
@@ -221,21 +277,25 @@ function updateDashboardForMonth(month, year) {
         monthlySalaryStat.textContent = formatCurrency(totalIncome);
     }
     if (employerBadge) {
-        employerBadge.textContent = employer ? `${employer} • In-Hand` : 'Employer Not Set';
+        employerBadge.textContent = employer ? `${employer} • In-Hand` : 'Not set';
     }
 
     // Stat 2 - Total Expenses Spent
     totalSpentEl.textContent = formatCurrency(totalSpent);
     if (spentPercentageBadge) {
-        const spentOfIncome = totalIncome > 0 ? ((totalSpent / totalIncome) * 100).toFixed(1) : 0;
-        spentPercentageBadge.textContent = `${spentOfIncome}% of monthly salary spent`;
+        if (totalIncome > 0 && isFinite(totalIncome)) {
+            const spentOfIncome = ((totalSpent / totalIncome) * 100).toFixed(1);
+            spentPercentageBadge.textContent = `${spentOfIncome}% of monthly salary spent`;
+        } else {
+            spentPercentageBadge.textContent = 'Set your salary first';
+        }
     }
 
     // Stat 3 - Net In-Pocket Savings
     remainingEl.textContent = formatCurrency(netSavings);
     if (remainingStatusBadge) {
-        if (totalIncome === 0) {
-            remainingStatusBadge.textContent = 'Set monthly salary to track';
+        if (!totalIncome || totalIncome <= 0 || !isFinite(totalIncome)) {
+            remainingStatusBadge.textContent = 'Set your salary first';
             remainingStatusBadge.style.color = 'var(--text-dim)';
         } else if (netSavings < 0) {
             remainingStatusBadge.textContent = 'Deficit: Overspending Salary ⚠️';
@@ -264,22 +324,21 @@ function updateDashboardForMonth(month, year) {
         }
     }
 
-    // Stat 4 - Daily Burn Rate & Payday Tracker
+    // Stat 4 - Average spend per day this month
     const now = new Date();
     const isCurrentMonth = month === now.getMonth() && year === now.getFullYear();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const elapsedDays = isCurrentMonth ? Math.max(1, now.getDate()) : daysInMonth;
+    const daysPassed = isCurrentMonth ? Math.max(1, now.getDate()) : daysInMonth;
 
-    const dailyBurn = totalSpent > 0 ? (totalSpent / elapsedDays) : 0;
+    const avgSpendPerDay = (totalSpent > 0 && isFinite(totalSpent)) ? (totalSpent / daysPassed) : 0;
     if (dailyAverageSpent) {
-        dailyAverageSpent.textContent = `${formatCurrency(dailyBurn)} / day`;
+        dailyAverageSpent.textContent = `${formatCurrency(avgSpendPerDay)} / day`;
     }
     if (paydayCounter) {
         if (isCurrentMonth) {
-            const daysLeft = daysInMonth - now.getDate() + 1;
-            paydayCounter.textContent = `Next Payday in ~${daysLeft} days`;
+            paydayCounter.textContent = `${daysPassed} of ${daysInMonth} days passed`;
         } else {
-            paydayCounter.textContent = `Completed month evaluation`;
+            paydayCounter.textContent = `Completed month (${daysInMonth} days)`;
         }
     }
 
@@ -296,11 +355,11 @@ function updateDashboardForMonth(month, year) {
     }
 
     // Budget Utilization Progress Bar
-    const budgetPercent = budget > 0 ? (totalSpent / budget) * 100 : 0;
+    const budgetPercent = (budget > 0 && isFinite(budget)) ? (totalSpent / budget) * 100 : 0;
     const cappedPercent = Math.min(budgetPercent, 100);
     progressFill.style.width = cappedPercent + '%';
     if (progressPercentLabel) {
-        progressPercentLabel.textContent = `${budgetPercent.toFixed(0)}%`;
+        progressPercentLabel.textContent = budget > 0 ? `${budgetPercent.toFixed(0)}%` : '-';
     }
 
     if (totalSpent > budget && budget > 0) {
@@ -324,52 +383,50 @@ function updateDashboardForMonth(month, year) {
 function updateSalaryAdvisor(month, year, income, totalSpent, netSavings) {
     if (!needsPercentLabel || !wantsPercentLabel || !savingsPercentLabel) return;
 
-    if (income <= 0) {
-        needsPercentLabel.textContent = '0%';
-        wantsPercentLabel.textContent = '0%';
-        savingsPercentLabel.textContent = '0%';
+    if (!income || income <= 0 || !isFinite(income)) {
+        needsPercentLabel.textContent = '-';
+        wantsPercentLabel.textContent = '-';
+        savingsPercentLabel.textContent = '-';
         needsProgressBar.style.width = '0%';
         wantsProgressBar.style.width = '0%';
         savingsProgressBar.style.width = '0%';
-        needsSpentText.textContent = 'Set salary to analyze';
-        wantsSpentText.textContent = 'Set salary to analyze';
-        savingsRetainedText.textContent = 'Set salary to analyze';
+        needsSpentText.textContent = 'Set your salary first';
+        wantsSpentText.textContent = 'Set your salary first';
+        savingsRetainedText.textContent = 'Set your salary first';
         return;
     }
 
     const monthExpenses = currentUser.getExpensesForMonth(month, year).filter(e => e.type !== 'income');
-    
-    // Needs categories: Bills, Food, Transport, Health
-    const needsCategories = ['Bills', 'Food', 'Transport', 'Health'];
-    // Wants categories: Shopping, Entertainment, Other
-    const wantsCategories = ['Shopping', 'Entertainment', 'Other'];
 
     let needsTotal = 0;
     let wantsTotal = 0;
 
     monthExpenses.forEach(exp => {
-        if (needsCategories.includes(exp.category)) {
+        if (isNeedsCategory(exp.category)) {
             needsTotal += exp.amount;
         } else {
             wantsTotal += exp.amount;
         }
     });
 
+    // Savings = salary minus total expenses
+    const savingsAmount = income - totalSpent;
+
     const needsRatio = (needsTotal / income) * 100;
     const wantsRatio = (wantsTotal / income) * 100;
-    const savingsRatio = Math.max(0, (netSavings / income) * 100);
+    const savingsRatio = Math.max(0, (savingsAmount / income) * 100);
 
-    needsPercentLabel.textContent = `${needsRatio.toFixed(1)}%`;
-    needsProgressBar.style.width = `${Math.min(needsRatio, 100)}%`;
+    needsPercentLabel.textContent = isFinite(needsRatio) ? `${needsRatio.toFixed(1)}%` : '0%';
+    needsProgressBar.style.width = `${Math.min(isFinite(needsRatio) ? needsRatio : 0, 100)}%`;
     needsSpentText.textContent = `${formatCurrency(needsTotal)} spent`;
 
-    wantsPercentLabel.textContent = `${wantsRatio.toFixed(1)}%`;
-    wantsProgressBar.style.width = `${Math.min(wantsRatio, 100)}%`;
+    wantsPercentLabel.textContent = isFinite(wantsRatio) ? `${wantsRatio.toFixed(1)}%` : '0%';
+    wantsProgressBar.style.width = `${Math.min(isFinite(wantsRatio) ? wantsRatio : 0, 100)}%`;
     wantsSpentText.textContent = `${formatCurrency(wantsTotal)} spent`;
 
-    savingsPercentLabel.textContent = `${savingsRatio.toFixed(1)}%`;
-    savingsProgressBar.style.width = `${Math.min(savingsRatio, 100)}%`;
-    savingsRetainedText.textContent = `${formatCurrency(Math.max(0, netSavings))} saved`;
+    savingsPercentLabel.textContent = isFinite(savingsRatio) ? `${savingsRatio.toFixed(1)}%` : '0%';
+    savingsProgressBar.style.width = `${Math.min(isFinite(savingsRatio) ? savingsRatio : 0, 100)}%`;
+    savingsRetainedText.textContent = `${formatCurrency(savingsAmount)} retained`;
 }
 
 /**
@@ -380,13 +437,15 @@ function renderCategoryBreakdown(month, year) {
     categoryGrid.innerHTML = '';
 
     const categories = [
-        { name: 'Bills', emoji: '💡' },
-        { name: 'Food', emoji: '🍔' },
-        { name: 'Transport', emoji: '🚗' },
+        { name: 'Rent & Housing', emoji: '🏠' },
+        { name: 'Groceries & Food', emoji: '🛒' },
+        { name: 'Transport & Fuel', emoji: '🚗' },
+        { name: 'Utilities & Bills', emoji: '💡' },
+        { name: 'Health & Wellness', emoji: '⚕️' },
+        { name: 'Dining Out', emoji: '🍽️' },
         { name: 'Shopping', emoji: '🛍️' },
         { name: 'Entertainment', emoji: '🎬' },
-        { name: 'Health', emoji: '⚕️' },
-        { name: 'Other', emoji: '📦' }
+        { name: 'Other Expenses', emoji: '📦' }
     ];
 
     const monthExpenses = currentUser.getExpensesForMonth(month, year).filter(e => e.type !== 'income');
@@ -394,7 +453,8 @@ function renderCategoryBreakdown(month, year) {
     let grandTotal = 0;
 
     monthExpenses.forEach(e => {
-        totals[e.category] = (totals[e.category] || 0) + e.amount;
+        const norm = normalizeCategory(e.category);
+        totals[norm] = (totals[norm] || 0) + e.amount;
         grandTotal += e.amount;
     });
 
@@ -434,13 +494,13 @@ function renderExpensesForViewingMonth() {
     expensesList.innerHTML = '';
     updateDashboardForMonth(viewingMonth, viewingYear);
 
-    // Update month badge text
+    // Update month badge text dynamically
     const viewingDate = new Date(viewingYear, viewingMonth);
     const monthName = viewingDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-    currentMonthBadge.textContent = monthName;
-
     const now = new Date();
     const isCurrentMonth = viewingMonth === now.getMonth() && viewingYear === now.getFullYear();
+    currentMonthBadge.textContent = isCurrentMonth ? `${monthName} - Current` : monthName;
+
     todayBtn.style.display = isCurrentMonth ? 'none' : 'inline-flex';
 
     // Get all transactions for viewing month
@@ -453,9 +513,9 @@ function renderExpensesForViewingMonth() {
         items = items.filter(e => e.type === 'income');
     }
 
-    // Filter by Category
+    // Filter by Category using normalized category
     if (activeCategoryFilter) {
-        items = items.filter(e => e.category === activeCategoryFilter);
+        items = items.filter(e => normalizeCategory(e.category) === activeCategoryFilter);
     }
 
     // Search Query Filter
@@ -463,7 +523,7 @@ function renderExpensesForViewingMonth() {
         const q = searchQuery.toLowerCase().trim();
         items = items.filter(e => 
             e.description.toLowerCase().includes(q) || 
-            e.category.toLowerCase().includes(q)
+            normalizeCategory(e.category).toLowerCase().includes(q)
         );
     }
 
@@ -502,6 +562,9 @@ function createTransactionCard(item) {
     const amountPerPerson = item.isSplit() ? item.getAmountPerPerson() : item.amount;
     const signPrefix = isIncome ? '+' : '-';
     const amountClass = isIncome ? 'income-amount' : '';
+    const safeDesc = escapeHtml(item.description || '');
+    const safeCat = escapeHtml(item.category || '');
+    const safeSplit = item.isSplit() ? escapeHtml((item.splitWith || []).join(', ')) : '';
 
     card.innerHTML = `
         <div class="expense-info">
@@ -509,7 +572,7 @@ function createTransactionCard(item) {
                 ${item.getCategoryEmoji()}
             </div>
             <div class="expense-header">
-                <span class="expense-description">${escapeHtml(item.description)}</span>
+                <span class="expense-description">${safeDesc}</span>
                 <div class="expense-meta">
                     <span class="expense-date">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -519,7 +582,7 @@ function createTransactionCard(item) {
                         </svg>
                         ${item.getFormattedDate()}
                     </span>
-                    <span class="expense-category-text">• ${item.category}</span>
+                    <span class="expense-category-text">• ${safeCat}</span>
                     ${isIncome ? '<span class="credit-badge">🟢 Salary / Credit</span>' : ''}
                 </div>
             </div>
@@ -530,13 +593,13 @@ function createTransactionCard(item) {
                     ${signPrefix}${formatCurrency(item.amount)}
                 </div>
                 ${item.isSplit() ? `
-                    <div class="split-badge" title="Split with ${item.splitWith.join(', ')}">
+                    <div class="split-badge" title="Split with ${safeSplit}">
                         <span>🤝 ${formatCurrency(amountPerPerson)}/ea</span>
                     </div>
                 ` : ''}
             </div>
             <div class="expense-actions">
-                <button class="btn-delete" title="Delete Transaction" onclick="deleteExpense('${item.id}')">
+                <button class="btn-delete" title="Delete Transaction" data-expense-id="${item.id}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -545,6 +608,14 @@ function createTransactionCard(item) {
             </div>
         </div>
     `;
+
+    const delBtn = card.querySelector('.btn-delete');
+    if (delBtn) {
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteExpense(item.id);
+        });
+    }
 
     return card;
 }
@@ -626,12 +697,17 @@ function openSalaryModal() {
  * Save Salary Profile
  */
 async function saveSalary() {
-    const amount = parseFloat(salaryInput.value);
-    const employer = employerInput.value.trim() || 'Salaried Pro';
+    const rawAmount = salaryInput.value.trim();
+    const amount = parseFloat(rawAmount);
+    const employer = employerInput.value.trim().substring(0, 50) || 'Not set';
     const payDay = parseInt(paydayInput.value) || 1;
 
-    if (!amount || amount <= 0) {
-        showToast('Please enter a valid in-hand salary amount', 'error');
+    if (!rawAmount || isNaN(amount) || !isFinite(amount) || amount <= 0) {
+        showToast('Please enter a valid positive in-hand salary amount', 'error');
+        return;
+    }
+    if (payDay < 1 || payDay > 31) {
+        showToast('Payday must be between 1 and 31', 'error');
         return;
     }
 
@@ -674,7 +750,7 @@ async function saveSalary() {
         showToast(`Monthly salary profile saved for ${employer}!`, 'success');
     } catch (error) {
         console.error('Error saving salary:', error);
-        showToast('Error saving salary profile.', 'error');
+        showToast(`Could not save salary: ${error.message || 'Firestore write error'}`, 'error');
     } finally {
         saveSalaryBtn.disabled = false;
         const topEl = saveSalaryBtn.querySelector('.btn-3d-top');
@@ -702,10 +778,11 @@ function openBudgetModal() {
  * Save Budget
  */
 async function saveBudget() {
-    const amount = parseFloat(budgetInput.value);
+    const rawAmount = budgetInput.value.trim();
+    const amount = parseFloat(rawAmount);
 
-    if (!amount || amount <= 0) {
-        showToast('Please enter a valid budget amount', 'error');
+    if (!rawAmount || isNaN(amount) || !isFinite(amount) || amount <= 0) {
+        showToast('Please enter a valid positive budget amount', 'error');
         return;
     }
 
@@ -723,7 +800,7 @@ async function saveBudget() {
         showToast(`Budget for ${monthName} saved successfully!`, 'success');
     } catch (error) {
         console.error('Error saving budget:', error);
-        showToast('Error saving budget.', 'error');
+        showToast(`Could not save budget: ${error.message || 'Firestore write error'}`, 'error');
     } finally {
         saveBudgetBtn.disabled = false;
         const topEl = saveBudgetBtn.querySelector('.btn-3d-top');
@@ -756,7 +833,7 @@ function setModalTransactionType(type) {
 
         // Populate Income categories
         populateCategoryDropdown(INCOME_CATEGORIES);
-        expenseDescription.placeholder = 'e.g. October Salary Credited, Diwali Bonus, Freelance';
+        expenseDescription.placeholder = 'e.g. October Salary Credited, Bonus, Freelance';
     } else {
         typeSwitchExpense.classList.add('active');
         typeSwitchIncome.classList.remove('active');
@@ -784,13 +861,14 @@ function populateCategoryDropdown(categories) {
  * Save Transaction (Expense or Income)
  */
 async function saveTransaction() {
-    const amount = parseFloat(expenseAmount.value);
+    const rawAmount = expenseAmount.value.trim();
+    const amount = parseFloat(rawAmount);
     const category = expenseCategory.value;
-    const description = expenseDescription.value.trim();
+    let description = expenseDescription.value.trim();
     const date = expenseDate.value;
 
-    if (!amount || amount <= 0) {
-        showToast('Please enter a valid amount', 'error');
+    if (!rawAmount || isNaN(amount) || !isFinite(amount) || amount <= 0) {
+        showToast('Please enter a valid positive amount', 'error');
         return;
     }
     if (!category) {
@@ -800,6 +878,9 @@ async function saveTransaction() {
     if (!description) {
         showToast('Please enter a description', 'error');
         return;
+    }
+    if (description.length > 100) {
+        description = description.substring(0, 100);
     }
     if (!date) {
         showToast('Please select a date', 'error');
@@ -823,7 +904,7 @@ async function saveTransaction() {
         if (currentModalTransactionType === 'expense' && splitExpenseCheckbox.checked && splitPeople.value.trim()) {
             transactionData.splitWith = splitPeople.value
                 .split(',')
-                .map(name => name.trim())
+                .map(name => name.trim().substring(0, 30))
                 .filter(name => name.length > 0);
         }
 
@@ -843,7 +924,7 @@ async function saveTransaction() {
         showToast(msg, 'success');
     } catch (error) {
         console.error('Error saving transaction:', error);
-        showToast('Error saving transaction.', 'error');
+        showToast(`Could not record transaction: ${error.message || 'Firestore write error'}`, 'error');
     } finally {
         saveExpenseBtn.disabled = false;
         const topEl = saveExpenseBtn.querySelector('.btn-3d-top');
@@ -863,7 +944,7 @@ async function deleteExpense(expenseId) {
         showToast('Transaction removed', 'success');
     } catch (error) {
         console.error('Error deleting transaction:', error);
-        showToast('Error removing transaction.', 'error');
+        showToast(`Could not remove transaction: ${error.message || 'Firestore error'}`, 'error');
     }
 }
 
@@ -968,17 +1049,17 @@ function escapeHtml(str) {
  * Sign Out
  */
 async function signOut() {
-    if (!confirm('Are you sure you want to sign out?')) return;
+    if (!confirm('Are you sure you want to log out?')) return;
 
     try {
         localStorage.removeItem('expense_tracker_guest_mode');
         if (typeof auth !== 'undefined' && auth.signOut) {
             await auth.signOut();
         }
-        window.location.href = '../login/login.html';
+        window.location.replace('../login/login.html');
     } catch (error) {
         console.error('Sign out error:', error);
-        window.location.href = '../login/login.html';
+        window.location.replace('../login/login.html');
     }
 }
 
@@ -1282,12 +1363,15 @@ function initAiAssistant() {
         if (existingSug) existingSug.remove();
 
         // Show typing indicator
-        if (aiTypingIndicator) aiTypingIndicator.style.display = 'block';
+        if (aiTypingIndicator) {
+            aiTypingIndicator.classList.add('active');
+            aiTypingIndicator.style.display = 'block';
+        }
         scrollToBottom();
 
         try {
             // Obtain Firebase ID Token
-            let idToken = 'test-token-guest_user';
+            let idToken = null;
             if (typeof auth !== 'undefined' && auth.currentUser) {
                 try {
                     idToken = await auth.currentUser.getIdToken(true);
@@ -1298,18 +1382,47 @@ function initAiAssistant() {
                 idToken = `test-token-${currentUser.uid}`;
             }
 
-            const response = await fetch(`${window.AI_API_BASE_URL}/chat`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}`
-                },
-                body: JSON.stringify({
-                    message: messageText,
-                    month: viewingMonth,
-                    year: viewingYear
-                })
-            });
+            if (!idToken) {
+                throw new Error('Authentication required. Please log in again.');
+            }
+
+            let response = null;
+            // 1. Attempt Vercel Serverless Function /api/chat first
+            try {
+                const apiRes = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({
+                        message: messageText,
+                        month: viewingMonth,
+                        year: viewingYear
+                    })
+                });
+                if (apiRes.ok) {
+                    response = apiRes;
+                }
+            } catch (serverlessErr) {
+                console.log('/api/chat route not available locally, checking live backend...', serverlessErr);
+            }
+
+            // 2. Fallback to Cloud Render backend
+            if (!response) {
+                response = await fetch(`${window.AI_API_BASE_URL}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({
+                        message: messageText,
+                        month: viewingMonth,
+                        year: viewingYear
+                    })
+                });
+            }
 
             if (!response.ok) {
                 const errData = await response.json().catch(() => ({}));
@@ -1328,10 +1441,13 @@ function initAiAssistant() {
 
         } catch (error) {
             console.error('AI chat error:', error);
-            const errorMsg = `⚠️ **Connection Notice:** Could not reach the AI Controller backend (${error.message}).\n\nPlease ensure the Python FastAPI backend is running on \`${window.AI_API_BASE_URL}\` (run \`python main.py\` inside \`ai-controller\`).`;
+            const errorMsg = `⚠️ **Connection Notice:** Could not reach the AI Controller backend (${error.message}).\n\nPlease ensure you are logged in and the AI service is operational.`;
             appendMessage('assistant', errorMsg);
         } finally {
-            if (aiTypingIndicator) aiTypingIndicator.style.display = 'none';
+            if (aiTypingIndicator) {
+                aiTypingIndicator.classList.remove('active');
+                aiTypingIndicator.style.display = 'none';
+            }
             scrollToBottom();
         }
     }

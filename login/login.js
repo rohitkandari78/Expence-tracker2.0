@@ -25,7 +25,7 @@ function initializeAuth() {
         auth.onAuthStateChanged((user) => {
             if (user) {
                 console.log('Firebase user active, redirecting to dashboard...');
-                window.location.href = '../dashboard/dashboard.html';
+                window.location.replace('../dashboard/');
             }
         });
     }
@@ -58,18 +58,18 @@ async function signInWithGoogle() {
         const user = result.user;
         
         await createUserDocument(user);
-        window.location.href = '../dashboard/dashboard.html';
+        window.location.replace('../dashboard/');
         
     } catch (error) {
         console.error('Sign in error:', error);
         
-        let errorMessage = 'Sign in failed. Check your Firebase credentials or try Demo Mode!';
+        let errorMessage = 'Sign in failed. Check your Firebase credentials.';
         if (error.code === 'auth/popup-closed-by-user') {
             errorMessage = 'Sign in was cancelled.';
         } else if (error.code === 'auth/network-request-failed') {
             errorMessage = 'Network error. Please check your connection.';
         } else if (error.code === 'auth/api-key-not-valid' || error.code === 'auth/invalid-api-key') {
-            errorMessage = 'Firebase API key not set. Please use Demo Mode below!';
+            errorMessage = 'Firebase API configuration error. Please verify project settings.';
         }
         
         showToast(errorMessage, 'error');

@@ -121,24 +121,30 @@ class User {
     }
 
     /**
-     * Get total income received (Base Monthly Salary + any income credits like Bonus/Freelance)
+     * Get total income received (Single source of truth: Base Monthly Salary + additional non-salary credits)
      */
     getTotalIncome(month = null, year = null) {
         const baseSalary = this.getSalary(month, year);
-        const items = this.getExpensesForMonth(month, year);
+        const items = this.getExpensesForMonth(month, year).filter(e => e.type === 'income');
         
-        // Sum additional income credits (excluding Base Salary if logged separately)
-        const incomeCredits = items
-            .filter(e => e.type === 'income')
-            .reduce((total, item) => total + item.amount, 0);
+        let salaryTxTotal = 0;
+        let nonSalaryIncome = 0;
 
-        // If salary is logged as a transaction or as base salary, avoid double count
-        const hasSalaryTransaction = items.some(e => e.type === 'income' && (e.category === 'Salary' || e.category === 'Monthly Salary'));
-        
-        if (hasSalaryTransaction) {
-            return incomeCredits;
-        }
-        return baseSalary + incomeCredits;
+        items.forEach(item => {
+            const cat = (item.category || '').trim().toLowerCase();
+            if (cat === 'salary' || cat === 'monthly salary') {
+                salaryTxTotal += item.amount;
+            } else {
+                nonSalaryIncome += item.amount;
+            }
+        });
+
+        // Single source of truth:
+        // If a base salary profile is set (>0), it represents the monthly salary.
+        // Any transaction logged as 'Salary' is the transaction record of that salary, preventing double counting.
+        // If base salary profile is not set, use the salary transaction total.
+        const effectiveSalary = (baseSalary > 0 && isFinite(baseSalary)) ? baseSalary : salaryTxTotal;
+        return effectiveSalary + nonSalaryIncome;
     }
 
     /**
@@ -153,9 +159,10 @@ class User {
      */
     getSavingsPercentage(month = null, year = null) {
         const income = this.getTotalIncome(month, year);
-        if (income <= 0) return 0;
+        if (!income || income <= 0 || !isFinite(income)) return 0;
         const savings = this.getNetSavings(month, year);
-        return Math.max(0, (savings / income) * 100);
+        const ratio = (savings / income) * 100;
+        return isFinite(ratio) ? Math.max(0, ratio) : 0;
     }
 
     /**
@@ -163,7 +170,7 @@ class User {
      */
     getRemainingBalance(month = null, year = null) {
         const budget = this.getBudget(month, year);
-        return budget - this.getTotalSpent(month, year);
+        return (budget || 0) - this.getTotalSpent(month, year);
     }
 
     /**
@@ -171,8 +178,9 @@ class User {
      */
     getSpendingPercentage(month = null, year = null) {
         const budget = this.getBudget(month, year);
-        if (budget === 0) return 0;
-        return (this.getTotalSpent(month, year) / budget) * 100;
+        if (!budget || budget <= 0 || !isFinite(budget)) return 0;
+        const ratio = (this.getTotalSpent(month, year) / budget) * 100;
+        return isFinite(ratio) ? ratio : 0;
     }
 
     /**
@@ -308,13 +316,30 @@ class Expense {
 
     getCategoryEmoji() {
         const emojiMap = {
-            // Expenses
-            'Food': '🍔',
+            // 50% Needs
+            'Rent & Housing': '🏠',
+            'Rent': '🏠',
+            'Housing': '🏠',
+            'Groceries & Food': '🛒',
+            'Food & Dining': '🛒',
+            'Food': '🛒',
+            'Groceries': '🛒',
+            'Transport & Fuel': '🚗',
             'Transport': '🚗',
+            'Fuel': '🚗',
+            'Utilities & Bills': '💡',
+            'Bills': '💡',
+            'Utilities': '💡',
+            'Health & Wellness': '⚕️',
+            'Health': '⚕️',
+            'Medical': '⚕️',
+            // 30% Wants
+            'Dining Out': '🍔',
+            'Dining': '🍔',
+            'Restaurant': '🍔',
             'Shopping': '🛍️',
             'Entertainment': '🎬',
-            'Bills': '💡',
-            'Health': '⚕️',
+            'Other Expenses': '📦',
             'Other': '📦',
             // Income & Salary
             'Salary': '💼',
@@ -412,134 +437,119 @@ class ExpenseManager {
      * Save Monthly Salary / Employment details
      */
     async saveSalary(amount, employer = '', month = null, year = null, payDay = 1) {
-        try {
-            const now = new Date();
-            const salaryMonth = month !== null ? month : now.getMonth();
-            const salaryYear = year !== null ? year : now.getFullYear();
-            const monthKey = `${salaryYear}-${salaryMonth}`;
+        const now = new Date();
+        const salaryMonth = month !== null ? month : now.getMonth();
+        const salaryYear = year !== null ? year : now.getFullYear();
 
-            this.user.setSalary(amount, salaryMonth, salaryYear, employer, payDay);
+        this.user.setSalary(amount, salaryMonth, salaryYear, employer, payDay);
 
-            if (this.db) {
+        if (this.db) {
+            try {
                 await this.db.collection('users').doc(this.user.uid).set({
                     salaries: this.user.salaries,
                     employer: this.user.employer,
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
-            } else {
+            } catch (error) {
+                console.error('Error saving salary to cloud Firestore:', error);
                 this._saveLocalState();
+                throw new Error(`Cloud sync failed: ${error.message || 'Permission denied or network issue'}`);
             }
-
-            return true;
-        } catch (error) {
-            console.error('Error saving salary to cloud, saving locally:', error);
+        } else {
             this._saveLocalState();
-            return true;
         }
+
+        return true;
     }
 
     /**
      * Save Budget
      */
     async saveBudget(amount, month = null, year = null) {
-        try {
-            const now = new Date();
-            const budgetMonth = month !== null ? month : now.getMonth();
-            const budgetYear = year !== null ? year : now.getFullYear();
-            const monthKey = `${budgetYear}-${budgetMonth}`;
-            
-            this.user.setBudget(amount, budgetMonth, budgetYear);
+        const now = new Date();
+        const budgetMonth = month !== null ? month : now.getMonth();
+        const budgetYear = year !== null ? year : now.getFullYear();
+        
+        this.user.setBudget(amount, budgetMonth, budgetYear);
 
-            if (this.db) {
+        if (this.db) {
+            try {
                 await this.db.collection('users').doc(this.user.uid).set({
                     budgets: this.user.budgets,
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
-            } else {
+            } catch (error) {
+                console.error('Error saving budget to cloud Firestore:', error);
                 this._saveLocalState();
+                throw new Error(`Cloud sync failed: ${error.message || 'Permission denied or network issue'}`);
             }
-            return true;
-        } catch (error) {
-            console.error('Error saving budget:', error);
+        } else {
             this._saveLocalState();
-            return true;
         }
+        return true;
     }
 
     /**
      * Add expense or income transaction
      */
     async addExpense(expenseData) {
-        try {
-            const expense = new Expense(
-                expenseData.amount,
-                expenseData.category,
-                expenseData.description,
-                expenseData.date,
-                expenseData.type || 'expense'
-            );
+        const expense = new Expense(
+            expenseData.amount,
+            expenseData.category,
+            expenseData.description,
+            expenseData.date,
+            expenseData.type || 'expense'
+        );
 
-            if (expenseData.splitWith && expenseData.splitWith.length > 0) {
-                expense.splitBetween(expenseData.splitWith);
-            }
+        if (expenseData.splitWith && expenseData.splitWith.length > 0) {
+            expense.splitBetween(expenseData.splitWith);
+        }
 
-            if (this.db) {
+        if (this.db) {
+            try {
                 await this.db
                     .collection('users')
                     .doc(this.user.uid)
                     .collection('expenses')
                     .doc(expense.id)
                     .set(expense.toFirestore());
-            }
-
-            this.user.addExpense(expense);
-            if (!this.db) {
+            } catch (error) {
+                console.error('Error adding transaction to cloud Firestore:', error);
                 this._saveLocalState();
+                throw new Error(`Could not save transaction to Firestore: ${error.message || 'Network error'}`);
             }
-            return expense;
-        } catch (error) {
-            console.error('Error adding transaction to cloud, saving locally:', error);
-            const expense = new Expense(
-                expenseData.amount,
-                expenseData.category,
-                expenseData.description,
-                expenseData.date,
-                expenseData.type || 'expense'
-            );
-            if (expenseData.splitWith && expenseData.splitWith.length > 0) {
-                expense.splitBetween(expenseData.splitWith);
-            }
-            this.user.addExpense(expense);
-            this._saveLocalState();
-            return expense;
         }
+
+        this.user.addExpense(expense);
+        if (!this.db) {
+            this._saveLocalState();
+        }
+        return expense;
     }
 
     /**
      * Delete expense
      */
     async deleteExpense(expenseId) {
-        try {
-            if (this.db) {
+        if (this.db) {
+            try {
                 await this.db
                     .collection('users')
                     .doc(this.user.uid)
                     .collection('expenses')
                     .doc(expenseId)
                     .delete();
+            } catch (error) {
+                console.error('Error deleting transaction from cloud Firestore:', error);
+                throw new Error(`Could not delete from Firestore: ${error.message || 'Network error'}`);
             }
-
-            this.user.removeExpense(expenseId);
-            if (!this.db) {
-                this._saveLocalState();
-            }
-            return true;
-        } catch (error) {
-            console.error('Error deleting transaction:', error);
-            this.user.removeExpense(expenseId);
-            this._saveLocalState();
-            return true;
         }
+
+        this.user.removeExpense(expenseId);
+        if (!this.db) {
+            this._saveLocalState();
+        }
+        return true;
     }
 
     /**
