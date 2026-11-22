@@ -62,27 +62,37 @@ module.exports = async function handler(req, res) {
     }
 
     try {
-        // Forward request with verified Bearer token to backend RAG Controller
-        const backendRes = await fetch(`${RENDER_BACKEND_URL}/chat`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${idToken}`
-            },
-            body: JSON.stringify({
-                message: message.trim(),
-                month: typeof month === 'number' ? month : new Date().getMonth(),
-                year: typeof year === 'number' ? year : new Date().getFullYear()
-            })
-        });
+        // Forward request with verified Bearer token to backend RAG Controller (with 4s timeout)
+        let backendRes = null;
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-        if (backendRes.ok) {
+            backendRes = await fetch(`${RENDER_BACKEND_URL}/chat`, {
+                method: 'POST',
+                signal: controller.signal,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`
+                },
+                body: JSON.stringify({
+                    message: message.trim(),
+                    month: typeof month === 'number' ? month : new Date().getMonth(),
+                    year: typeof year === 'number' ? year : new Date().getFullYear()
+                })
+            });
+            clearTimeout(timeoutId);
+        } catch (fetchErr) {
+            console.log('Render backend timeout or unreachable:', fetchErr.message);
+        }
+
+        if (backendRes && backendRes.ok) {
             const data = await backendRes.json();
             return res.status(200).json(data);
         }
 
         // If backend returned 401 or 403, propagate authentication error
-        if (backendRes.status === 401 || backendRes.status === 403) {
+        if (backendRes && (backendRes.status === 401 || backendRes.status === 403)) {
             const errData = await backendRes.json().catch(() => ({}));
             return res.status(backendRes.status).json({
                 success: false,
@@ -92,49 +102,59 @@ module.exports = async function handler(req, res) {
         }
 
         // Fallback to direct Gemini Generative API if backend RAG service is sleeping/unavailable
-        if (GEMINI_API_KEY) {
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-            const prompt = `You are a financial advisor assistant in the Expense Tracker 3D web application.
+        const hasRealGemini = Boolean(GEMINI_API_KEY && !GEMINI_API_KEY.startsWith('your_') && GEMINI_API_KEY.length > 20);
+        if (hasRealGemini) {
+            try {
+                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+                const prompt = `You are an AI financial advisor assistant in the Expense Tracker 3D web application.
 The user is asking: "${message.trim()}".
-Provide a helpful, concise, well-formatted financial response with actionable suggestions.`;
+Provide a helpful, concise, well-formatted financial response with actionable suggestions in bullet points where appropriate.`;
 
-            const geminiRes = await fetch(geminiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { maxOutputTokens: 500, temperature: 0.3 }
-                })
-            });
-
-            if (geminiRes.ok) {
-                const geminiData = await geminiRes.json();
-                const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated.';
-                return res.status(200).json({
-                    answer: text,
-                    sources: [],
-                    suggested_followups: [
-                        'Where am I spending the most?',
-                        'Analyze my 50/30/20 salary rule allocation',
-                        'Give me savings tips for this month'
-                    ]
+                const geminiRes = await fetch(geminiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { maxOutputTokens: 500, temperature: 0.3 }
+                    })
                 });
+
+                if (geminiRes.ok) {
+                    const geminiData = await geminiRes.json();
+                    const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated.';
+                    return res.status(200).json({
+                        answer: text,
+                        sources: [],
+                        suggested_followups: [
+                            'Where am I spending the most?',
+                            'Analyze my 50/30/20 salary rule allocation',
+                            'Give me savings tips for this month'
+                        ]
+                    });
+                }
+            } catch (geminiErr) {
+                console.log('Direct Gemini fallback error:', geminiErr.message);
             }
         }
 
-        const backendError = await backendRes.text().catch(() => '');
-        return res.status(backendRes.status).json({
-            success: false,
-            error: 'AI Controller Service Unavailable',
-            detail: backendError || 'Backend service responded with an error.'
+        // If neither backend nor Gemini responded, return graceful fallback flag so client calculates exact grounded stats locally
+        return res.status(200).json({
+            answer: null,
+            fallback_to_local: true,
+            suggested_followups: [
+                'How much have I spent this month?',
+                'What is my remaining budget?',
+                'What is my highest spending category?',
+                'Show my 50/30/20 rule breakdown'
+            ]
         });
 
     } catch (error) {
         console.error('Serverless AI error:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Internal Server Error',
-            message: error.message || 'An error occurred while contacting the AI assistant.'
+        return res.status(200).json({
+            answer: null,
+            fallback_to_local: true,
+            message: error.message
         });
     }
-}
+};

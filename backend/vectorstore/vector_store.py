@@ -60,23 +60,23 @@ class VectorStoreService:
             )
 
             # Fast, memory-efficient embedding configuration (optimized for cloud & 512MB RAM)
-            if settings.ENVIRONMENT == "test":
+            has_real_gemini_key = bool(
+                settings.GEMINI_API_KEY 
+                and not settings.GEMINI_API_KEY.startswith("your_")
+                and len(settings.GEMINI_API_KEY) > 20
+            )
+
+            if settings.ENVIRONMENT == "test" or not has_real_gemini_key:
+                logger.info("Using DummyEmbeddingFunction (fast deterministic offline embedding)")
                 self.embedding_fn = DummyEmbeddingFunction()
-            elif settings.GEMINI_API_KEY:
+            else:
                 try:
                     self.embedding_fn = embedding_functions.GoogleGenerativeAiEmbeddingFunction(
                         api_key=settings.GEMINI_API_KEY
                     )
                     logger.info("Using Google Gemini Generative AI Embedding Function")
                 except Exception as g_err:
-                    logger.warning(f"Could not load Gemini Embedding ({g_err}), falling back to default")
-                    self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
-            else:
-                try:
-                    self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
-                    logger.info("Using ChromaDB DefaultEmbeddingFunction (ONNX runtime, low memory)")
-                except Exception as onnx_err:
-                    logger.warning(f"Could not load ONNX embedding ({onnx_err}), using DummyEmbeddingFunction fallback")
+                    logger.warning(f"Could not load Gemini Embedding ({g_err}), falling back to dummy")
                     self.embedding_fn = DummyEmbeddingFunction()
 
             self.collection = self.client.get_or_create_collection(

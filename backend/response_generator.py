@@ -37,8 +37,13 @@ class ResponseGenerator:
         self._init_gemini()
 
     def _init_gemini(self):
-        """Initializes Google Gemini API client if API key is provided."""
-        if settings.GEMINI_API_KEY:
+        """Initializes Google Gemini API client if valid API key is provided."""
+        has_real_key = bool(
+            settings.GEMINI_API_KEY 
+            and not settings.GEMINI_API_KEY.startswith("your_")
+            and len(settings.GEMINI_API_KEY) > 20
+        )
+        if has_real_key:
             try:
                 genai.configure(api_key=settings.GEMINI_API_KEY)
                 self.model = genai.GenerativeModel(
@@ -50,7 +55,7 @@ class ResponseGenerator:
                 logger.warning(f"Failed to initialize Gemini model: {e}")
                 self.model = None
         else:
-            logger.info("GEMINI_API_KEY not configured. Deterministic grounded generator will serve as active responder.")
+            logger.info("Real GEMINI_API_KEY not configured. Deterministic grounded generator will serve as active responder.")
 
     def generate_response(
         self,
